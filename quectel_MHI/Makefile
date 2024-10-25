@@ -1,47 +1,34 @@
-#
-# Copyright (C) 2015 OpenWrt.org
-#
-# This is free software, licensed under the GNU General Public License v2.
-# See /LICENSE for more information.
-#
+#ccflags-y += -g
+obj-m += pcie_mhi.o
+pcie_mhi-objs := core/mhi_init.o core/mhi_main.o core/mhi_pm.o core/mhi_boot.o core/mhi_dtr.o  controllers/mhi_qti.o
+pcie_mhi-objs += devices/mhi_uci.o
 
-include $(TOPDIR)/rules.mk
+ifeq (1,1)
+pcie_mhi-objs += devices/mhi_netdev_quectel.o
+else
+pcie_mhi-objs += devices/mhi_netdev.o
+pcie_mhi-objs += devices/rmnet_handler.o
+endif
 
-PKG_NAME:=pcie_mhi
-PKG_VERSION:=1.3.6
-PKG_RELEASE:=1
+PWD := $(shell pwd)
+ifeq ($(ARCH),)
+ARCH := $(shell uname -m)
+endif
+ifeq ($(CROSS_COMPILE),)
+CROSS_COMPILE :=
+endif
+ifeq ($(KDIR),)
+KDIR := /lib/modules/$(shell uname -r)/build
+endif
 
-include $(INCLUDE_DIR)/kernel.mk
-include $(INCLUDE_DIR)/package.mk
+pcie_mhi: clean
+	$(MAKE) ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} -C $(KDIR) M=$(PWD) modules
+	#cp pcie_mhi.ko /tftpboot/
 
-define KernelPackage/pcie_mhi
-  SUBMENU:=WWAN Support
-  TITLE:=Kernel pcie driver for MHI device
-  DEPENDS:=+pciids +pciutils +quectel-CM-5G
-  FILES:=$(PKG_BUILD_DIR)/pcie_mhi.ko
-  AUTOLOAD:=$(call AutoLoad,90,pcie_mhi)
-endef
+clean:
+	$(MAKE) ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} -C $(KDIR) M=$(PWD) clean
+	find . -name *.o.ur-safe | xargs rm -f
 
-define KernelPackage/pcie_mhi/description
-  Kernel module for register a custom pciemhi platform device.
-endef
-
-MAKE_OPTS:= \
-	ARCH="$(LINUX_KARCH)" \
-	CROSS_COMPILE="$(TARGET_CROSS)" \
-	CXXFLAGS="$(TARGET_CXXFLAGS)" \
-	M="$(PKG_BUILD_DIR)" \
-	$(EXTRA_KCONFIG)
-
-define Build/Prepare
-	mkdir -p $(PKG_BUILD_DIR)
-	$(CP) ./src/* $(PKG_BUILD_DIR)/
-endef
-
-define Build/Compile
-	$(MAKE) -C "$(LINUX_DIR)" \
-		$(MAKE_OPTS) \
-		modules
-endef
-
-$(eval $(call KernelPackage,pcie_mhi))
+install: pcie_mhi
+	sudo cp pcie_mhi.ko /lib/modules/${shell uname -r}/kernel/drivers/pci/
+	sudo depmod
